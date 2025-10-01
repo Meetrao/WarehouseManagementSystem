@@ -11,7 +11,6 @@ class OrdersWindow:
         # Create orders window
         self.root = tk.Toplevel()
         self.root.title("Warehouse Management - Orders")
-        self.root.geometry("1000x600")
         self.root.resizable(True, True)
         
         # Create interface
@@ -54,7 +53,7 @@ class OrdersWindow:
             font=("Arial", 11, "bold"),
             bg='#4CAF50',
             fg='black',
-            command=self.create_order,
+            command=self.create_order, # This is correct
             cursor='hand2'
         )
         btn_add.pack(side='left', padx=(0, 10))
@@ -195,7 +194,10 @@ class OrdersWindow:
                 self.status_var.set("Error loading orders")
     
     def create_order(self):
-        """Create a new order"""
+        """
+        Open the CreateOrderDialog and handle the result.
+        This is the new logic to insert data from the dialog.
+        """
         dialog = CreateOrderDialog(self.root)
         if dialog.result:
             order_data, order_items = dialog.result
@@ -213,17 +215,17 @@ class OrdersWindow:
                     cursor.execute(order_query, order_data)
                     order_id = cursor.lastrowid
                     
-                    # Insert order items
+                    # Insert order items and update product quantities
                     item_query = """
                         INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price)
                         VALUES (%s, %s, %s, %s, %s)
                     """
                     for item in order_items:
-                        cursor.execute(item_query, (order_id,) + item)
+                        # item is (product_id, quantity, unit_price, total_price)
+                        product_id, quantity, unit_price, total_price = item
+                        cursor.execute(item_query, (order_id, product_id, quantity, unit_price, total_price))
                     
-                    # Update product quantities
-                    for item in order_items:
-                        product_id, quantity = item[0], item[1]
+                        # Update product quantity
                         cursor.execute("""
                             UPDATE products SET quantity = quantity - %s WHERE id = %s
                         """, (quantity, product_id))
@@ -493,15 +495,16 @@ class CreateOrderDialog:
         if connection:
             try:
                 cursor = connection.cursor()
-                cursor.execute("SELECT id, name, price FROM products WHERE quantity > 0")
+                cursor.execute("SELECT id, name, price, quantity FROM products WHERE quantity > 0")
                 products = cursor.fetchall()
                 
                 product_list = []
                 self.product_data = {}
                 for product in products:
-                    display_text = f"{product[1]} - ₹{product[2]:,.2f}"
+                    product_id, product_name, price, quantity = product
+                    display_text = f"{product_name} - ₹{price:,.2f} (Stock: {quantity})"
                     product_list.append(display_text)
-                    self.product_data[display_text] = product
+                    self.product_data[display_text] = (product_id, product_name, price, quantity)
                 
                 self.product_combo['values'] = product_list
                 cursor.close()
@@ -512,10 +515,10 @@ class CreateOrderDialog:
     
     def add_item(self):
         """Add item to order"""
-        selected_product = self.product_combo.get()
+        selected_product_text = self.product_combo.get()
         quantity_str = self.quantity_entry.get().strip()
         
-        if not selected_product:
+        if not selected_product_text:
             messagebox.showwarning("Validation Error", "Please select a product!")
             return
         
@@ -527,8 +530,14 @@ class CreateOrderDialog:
             messagebox.showerror("Validation Error", "Please enter a valid quantity!")
             return
         
-        # Get product data
-        product_id, product_name, unit_price = self.product_data[selected_product]
+        # Get product data from dictionary
+        product_id, product_name, unit_price, stock_quantity = self.product_data[selected_product_text]
+
+        # Check for sufficient stock
+        if quantity > stock_quantity:
+            messagebox.showerror("Stock Error", f"Not enough stock for {product_name}. Available: {stock_quantity}")
+            return
+
         total_price = unit_price * quantity
         
         # Add to items list
@@ -536,7 +545,7 @@ class CreateOrderDialog:
             product_name, quantity, f"₹{unit_price:,.2f}", f"₹{total_price:,.2f}"
         ))
         
-        # Store item data
+        # Store item data (product_id, quantity, unit_price, total_price)
         self.order_items.append((product_id, quantity, unit_price, total_price))
         
         # Update total
