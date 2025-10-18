@@ -870,7 +870,7 @@ We welcome contributions! Here's how you can help:
 
 ```bash
 # Clone your fork
-git clone https://github.com/yourusername/warehouse-management-system.git
+git clone https://github.com/Meetrao/WarehouseManagement
 
 # Create virtual environment
 python -m venv warehouse_env
