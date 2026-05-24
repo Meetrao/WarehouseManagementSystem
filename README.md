@@ -1,4 +1,4 @@
-# 🏭 Warehouse Management System
+#  Warehouse Management System
 
 <div align="center">
 
